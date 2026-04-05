@@ -25,14 +25,9 @@ fn windows_icon() {
     let mut icon_dir = ico::IconDir::new(ico::ResourceType::Icon);
 
     for size in [16u32, 24, 32, 48, 64, 128, 256] {
-        let scaled = if rgba.width() == size && rgba.height() == size {
-            rgba.clone()
-        } else {
-            image::imageops::resize(&rgba, size, size, image::imageops::FilterType::Lanczos3)
-        };
-        // Opaque pixels: Explorer often paints BMP-style icons with white behind “empty” alpha.
-        let flat = logo_bitmap::composite_on_icon_bg(&scaled);
+        let flat = logo_bitmap::rasterize_logo_for_shell_ico(&rgba, size);
         let icon_img = ico::IconImage::from_rgba_data(size, size, flat.into_raw());
+        // Opaque RGBA; PNG entries tend to look correct in Explorer vs some BMP paths.
         let entry = ico::IconDirEntry::encode_as_png(&icon_img)
             .unwrap_or_else(|e| panic!("ico encode {size}x{size}: {e}"));
         icon_dir.add_entry(entry);

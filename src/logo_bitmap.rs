@@ -16,6 +16,16 @@ fn key_out_light_backdrop(img: &mut RgbaImage) {
             *p = Rgba([0, 0, 0, 0]);
             continue;
         }
+        // Cream / off-white tiles that sit below the strict thresholds.
+        if max_rgb >= 238 && min_rgb >= 228 && sum >= 685 {
+            *p = Rgba([0, 0, 0, 0]);
+            continue;
+        }
+        // Flat “almost white” blocks (common in design exports).
+        if r >= 236 && g >= 236 && b >= 236 {
+            *p = Rgba([0, 0, 0, 0]);
+            continue;
+        }
         if sum >= 680 && min_rgb >= 200 && max_rgb >= 235 {
             let bleed = (sum.saturating_sub(650)) as f32 / 120.0;
             let factor = (1.0 - bleed.min(1.0)).max(0.0);
@@ -94,12 +104,48 @@ pub fn decode_logo_rgba(png_bytes: &[u8]) -> RgbaImage {
 /// Opaque app background (matches `window_icon_data` and egui theme).
 pub const ICON_BG: Rgba<u8> = Rgba([6u8, 5u8, 10u8, 255u8]);
 
-/// Flatten transparency onto the dark chrome so shell icons never show a white plate.
-/// Only called from `build.rs` (embedded .ico); unused in normal `cargo check` of the binary.
-#[allow(dead_code)]
-pub fn composite_on_icon_bg(img: &RgbaImage) -> RgbaImage {
+/// Straight-alpha composite onto `ICON_BG` with **fully opaque** output (Explorer mishandles residual alpha).
+fn flatten_opaque_on_background(img: &RgbaImage) -> RgbaImage {
+    let bg = ICON_BG.0;
     let (w, h) = (img.width(), img.height());
-    let mut out = ImageBuffer::from_fn(w, h, |_, _| ICON_BG);
-    image::imageops::overlay(&mut out, img, 0, 0);
-    out
+    ImageBuffer::from_fn(w, h, |x, y| {
+        let [r, g, b, a] = img.get_pixel(x, y).0;
+        let t = a as f32 / 255.0;
+        let inv = 1.0 - t;
+        Rgba([
+            ((r as f32 * t) + bg[0] as f32 * inv).round() as u8,
+            ((g as f32 * t) + bg[1] as f32 * inv).round() as u8,
+            ((b as f32 * t) + bg[2] as f32 * inv).round() as u8,
+            255,
+        ])
+    })
+}
+
+/// Match taskbar icon layout: preserve aspect, center on dark chrome, no Lanczos ringing (bad for .ico).
+/// Used only by `build.rs` for the embedded application icon.
+#[allow(dead_code)]
+pub fn rasterize_logo_for_shell_ico(img: &RgbaImage, canvas: u32) -> RgbaImage {
+    let canvas = canvas.max(1);
+    let margin = if canvas <= 24 { 1 } else { 2 };
+    let target = canvas.saturating_sub(margin * 2).max(1) as f32;
+
+    let (iw, ih) = (img.width() as f32, img.height().max(1) as f32);
+    let max_side = iw.max(ih).max(1.0);
+    let scale = target / max_side;
+    let nw = (iw * scale).round().clamp(1.0, canvas as f32) as u32;
+    let nh = (ih * scale).round().clamp(1.0, canvas as f32) as u32;
+
+    // Triangle filter avoids Lanczos overshoot (bright white halos) on small icons.
+    let resized = image::imageops::resize(
+        img,
+        nw,
+        nh,
+        image::imageops::FilterType::Triangle,
+    );
+
+    let mut out: RgbaImage = ImageBuffer::from_fn(canvas, canvas, |_, _| ICON_BG);
+    let ox = ((canvas.saturating_sub(nw)) / 2) as i64;
+    let oy = ((canvas.saturating_sub(nh)) / 2) as i64;
+    image::imageops::overlay(&mut out, &resized, ox, oy);
+    flatten_opaque_on_background(&out)
 }

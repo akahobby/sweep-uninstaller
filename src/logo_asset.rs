@@ -29,7 +29,7 @@ pub fn window_icon_data() -> IconData {
     let scale = TARGET_MAX / max_side;
     let nw = ((iw as f32 * scale).round() as u32).clamp(1, CANVAS);
     let nh = ((ih as f32 * scale).round() as u32).clamp(1, CANVAS);
-    let resized = image::imageops::resize(&img, nw, nh, image::imageops::FilterType::Lanczos3);
+    let resized = image::imageops::resize(&img, nw, nh, image::imageops::FilterType::Triangle);
     let ox = (CANVAS - nw) / 2;
     let oy = (CANVAS - nh) / 2;
     image::imageops::overlay(&mut canvas, &resized, ox as i64, oy as i64);
