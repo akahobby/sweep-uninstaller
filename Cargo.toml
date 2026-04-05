@@ -1,0 +1,31 @@
+[package]
+name = "sweep-uninstall"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = "0.29"
+egui = "0.29"
+image = { version = "0.25", default-features = false, features = ["png"] }
+winreg = "0.52"
+walkdir = "2"
+regex = "1"
+
+[dependencies.windows]
+version = "0.58"
+features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "ApplicationModel",
+    "Foundation_Collections",
+    "Management_Deployment",
+    "Storage",
+]
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
