@@ -1,0 +1,38 @@
+name: Release portable (Windows exe zip)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Package zip
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ver = $tag.TrimStart('v')
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $zip = "$(Get-Location)/dist/sweep-uninstall-v${ver}-windows-x64-portable.zip"
+          Compress-Archive -LiteralPath target/release/sweep-uninstall.exe -DestinationPath $zip -CompressionLevel Optimal
+          Add-Content -Path $env:GITHUB_ENV -Value "ASSET_PATH=$zip"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ASSET_PATH }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

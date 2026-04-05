@@ -4,6 +4,20 @@ Windows uninstall helper: browse **Win32** (registry) programs, **Steam** games,
 
 Built with Rust and [egui](https://github.com/emilk/egui) / [eframe](https://github.com/emilk/egui/tree/main/crates/eframe). Ships as a single `sweep-uninstall.exe` when built in release mode.
 
+## Portable download (exe only)
+
+GitHub **Releases** include a zip with just the 64-bit Windows executable—extract and run; no installer.
+
+To build the same zip locally:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/package-portable.ps1
+```
+
+Output: `dist/sweep-uninstall-v<version>-windows-x64-portable.zip`.
+
+Publishing a release from git: tag with `v` plus the version (same as `Cargo.toml`), push the tag, and the `release-portable` workflow will attach the zip to a GitHub Release.
+
 ## Requirements
 
 - **Windows 10 or 11** (x64)
