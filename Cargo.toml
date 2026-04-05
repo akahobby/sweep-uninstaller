@@ -2,6 +2,17 @@
 name = "sweep-uninstall"
 version = "1.0.0"
 edition = "2021"
+description = "Windows uninstall helper (Win32, Steam, Microsoft Store)"
+
+[package.metadata.winres]
+FileDescription = "Sweep Uninstall"
+ProductName = "Sweep Uninstall"
+OriginalFilename = "sweep-uninstall.exe"
+
+[build-dependencies]
+ico = "0.3"
+image = { version = "0.25", default-features = false, features = ["png"] }
+winres = "0.1"
 
 [dependencies]
 eframe = "0.29"
