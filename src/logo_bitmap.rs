@@ -101,6 +101,29 @@ pub fn decode_logo_rgba(png_bytes: &[u8]) -> RgbaImage {
     crop_to_visible_rgba(img)
 }
 
+/// Extra pass for the **embedded .ico** only: catch light mattes that still read as a white tile in Explorer.
+#[allow(dead_code)] // used from build.rs
+pub fn purge_light_matte_for_exe_icon(img: &mut RgbaImage) {
+    for p in img.pixels_mut() {
+        let [r, g, b, a] = p.0;
+        if a < 8 {
+            continue;
+        }
+        let mx = r.max(g).max(b);
+        let mn = r.min(g).min(b);
+        let sum = r as u32 + g as u32 + b as u32;
+        let spread = mx.saturating_sub(mn);
+        // Bright, low-chroma blocks (white / gray cards) — logo purple keeps higher spread.
+        if spread <= 35 && sum >= 520 && mx >= 185 {
+            *p = Rgba([0, 0, 0, 0]);
+            continue;
+        }
+        if r >= 195 && g >= 195 && b >= 195 {
+            *p = Rgba([0, 0, 0, 0]);
+        }
+    }
+}
+
 /// Opaque app background (matches `window_icon_data` and egui theme).
 pub const ICON_BG: Rgba<u8> = Rgba([6u8, 5u8, 10u8, 255u8]);
 
@@ -147,5 +170,21 @@ pub fn rasterize_logo_for_shell_ico(img: &RgbaImage, canvas: u32) -> RgbaImage {
     let ox = ((canvas.saturating_sub(nw)) / 2) as i64;
     let oy = ((canvas.saturating_sub(nh)) / 2) as i64;
     image::imageops::overlay(&mut out, &resized, ox, oy);
-    flatten_opaque_on_background(&out)
+    let mut flat = flatten_opaque_on_background(&out);
+    squash_bright_artifacts_on_dark(&mut flat);
+    flat
+}
+
+/// Resize/compression can leave near-white fringes; replace with ICON_BG so Explorer never shows a white plate.
+fn squash_bright_artifacts_on_dark(img: &mut RgbaImage) {
+    let bg = ICON_BG.0;
+    for p in img.pixels_mut() {
+        let [r, g, b, a] = p.0;
+        if a < 200 {
+            continue;
+        }
+        if r >= 210 && g >= 210 && b >= 210 {
+            *p = Rgba([bg[0], bg[1], bg[2], 255]);
+        }
+    }
 }

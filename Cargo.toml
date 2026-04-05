@@ -37,6 +37,7 @@ features = [
 ]
 
 [profile.release]
-strip = true
+# `strip` can damage PE resources on some MSVC/llvm-strip paths; keep embedded .ico intact.
+strip = false
 lto = true
 codegen-units = 1

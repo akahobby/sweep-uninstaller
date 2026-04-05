@@ -19,7 +19,8 @@ fn windows_icon() {
     let logo_path = manifest_dir.join("assets/logo.png");
     let png = std::fs::read(&logo_path).unwrap_or_else(|e| panic!("read {}: {e}", logo_path.display()));
 
-    let rgba = logo_bitmap::decode_logo_rgba(&png);
+    let mut rgba = logo_bitmap::decode_logo_rgba(&png);
+    logo_bitmap::purge_light_matte_for_exe_icon(&mut rgba);
 
     let out_ico = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("app.ico");
     let mut icon_dir = ico::IconDir::new(ico::ResourceType::Icon);
@@ -27,8 +28,8 @@ fn windows_icon() {
     for size in [16u32, 24, 32, 48, 64, 128, 256] {
         let flat = logo_bitmap::rasterize_logo_for_shell_ico(&rgba, size);
         let icon_img = ico::IconImage::from_rgba_data(size, size, flat.into_raw());
-        // Opaque RGBA; PNG entries tend to look correct in Explorer vs some BMP paths.
-        let entry = ico::IconDirEntry::encode_as_png(&icon_img)
+        // BMP DIB + mask: Explorer handles this more reliably than PNG-in-ICO for the shell.
+        let entry = ico::IconDirEntry::encode_as_bmp(&icon_img)
             .unwrap_or_else(|e| panic!("ico encode {size}x{size}: {e}"));
         icon_dir.add_entry(entry);
     }
