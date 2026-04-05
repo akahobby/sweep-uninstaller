@@ -6,17 +6,17 @@ Built with Rust and [egui](https://github.com/emilk/egui) / [eframe](https://git
 
 ## Portable download (exe only)
 
-GitHub **Releases** include a zip with just the 64-bit Windows executable—extract and run; no installer.
+GitHub **Releases** attach the 64-bit Windows **`.exe`** directly—download and run; no installer, no zip.
 
-To build the same zip locally:
+To produce the same file locally (e.g. for a manual upload):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/package-portable.ps1
 ```
 
-Output: `dist/sweep-uninstall-v<version>-windows-x64-portable.zip`.
+Output: `dist/sweep-uninstall-v<version>-windows-x64.exe`.
 
-Publishing a release from git: tag with `v` plus the version (same as `Cargo.toml`), push the tag, and the `release-portable` workflow will attach the zip to a GitHub Release.
+Publishing a release from git: tag with `v` plus the version (same as `Cargo.toml`), push the tag, and the `release-portable` workflow will attach that executable to the GitHub Release.
 
 ## Requirements
 

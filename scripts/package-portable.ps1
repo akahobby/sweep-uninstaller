@@ -1,5 +1,6 @@
-# Build release and zip a single portable exe into dist/
-# Run from repo root:  pwsh -File scripts/package-portable.ps1
+# Build release and copy the portable exe into dist/ (for manual upload or testing).
+# Run from repo root:
+#   powershell -ExecutionPolicy Bypass -File scripts/package-portable.ps1
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -19,11 +20,10 @@ if (-not (Test-Path $exe)) {
 
 $dist = Join-Path $root "dist"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
-$zipName = "sweep-uninstall-v$ver-windows-x64-portable.zip"
-$zipPath = Join-Path $dist $zipName
+$outName = "sweep-uninstall-v$ver-windows-x64.exe"
+$outPath = Join-Path $dist $outName
 
-if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-Compress-Archive -LiteralPath $exe -DestinationPath $zipPath -CompressionLevel Optimal
+Copy-Item -LiteralPath $exe -Destination $outPath -Force
 
-$mb = [math]::Round((Get-Item $zipPath).Length / 1048576, 2)
-Write-Host "Wrote $zipPath (${mb} MB)"
+$mb = [math]::Round((Get-Item $outPath).Length / 1048576, 2)
+Write-Host "Wrote $outPath (${mb} MB)"

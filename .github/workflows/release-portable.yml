@@ -1,4 +1,4 @@
-name: Release portable (Windows exe zip)
+name: Release portable (Windows exe)
 
 on:
   push:
@@ -19,15 +19,15 @@ jobs:
       - name: Build release
         run: cargo build --release
 
-      - name: Package zip
+      - name: Stage executable for upload
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
           $ver = $tag.TrimStart('v')
           New-Item -ItemType Directory -Force dist | Out-Null
-          $zip = "$(Get-Location)/dist/sweep-uninstall-v${ver}-windows-x64-portable.zip"
-          Compress-Archive -LiteralPath target/release/sweep-uninstall.exe -DestinationPath $zip -CompressionLevel Optimal
-          Add-Content -Path $env:GITHUB_ENV -Value "ASSET_PATH=$zip"
+          $out = "$(Get-Location)/dist/sweep-uninstall-v${ver}-windows-x64.exe"
+          Copy-Item target/release/sweep-uninstall.exe $out
+          Add-Content -Path $env:GITHUB_ENV -Value "ASSET_PATH=$out"
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
