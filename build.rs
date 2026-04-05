@@ -1,7 +1,3 @@
-use std::fs::File;
-use std::io::BufWriter;
-use std::path::PathBuf;
-
 fn main() {
     println!("cargo:rerun-if-changed=assets/logo.png");
 
@@ -11,6 +7,10 @@ fn main() {
 
 #[cfg(windows)]
 fn windows_icon() {
+    use std::fs::File;
+    use std::io::BufWriter;
+    use std::path::PathBuf;
+
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let logo_path = manifest_dir.join("assets/logo.png");
     let png = std::fs::read(&logo_path).unwrap_or_else(|e| panic!("read {}: {e}", logo_path.display()));
