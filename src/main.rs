@@ -3,6 +3,7 @@
 mod app;
 mod enumerate;
 mod leftovers;
+mod logo_bitmap;
 mod logo_asset;
 mod models;
 mod ms_store;

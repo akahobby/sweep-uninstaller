@@ -1,5 +1,6 @@
 fn main() {
     println!("cargo:rerun-if-changed=assets/logo.png");
+    println!("cargo:rerun-if-changed=src/logo_bitmap.rs");
 
     #[cfg(windows)]
     windows_icon();
@@ -7,6 +8,9 @@ fn main() {
 
 #[cfg(windows)]
 fn windows_icon() {
+    #[path = "src/logo_bitmap.rs"]
+    mod logo_bitmap;
+
     use std::fs::File;
     use std::io::BufWriter;
     use std::path::PathBuf;
@@ -15,9 +19,7 @@ fn windows_icon() {
     let logo_path = manifest_dir.join("assets/logo.png");
     let png = std::fs::read(&logo_path).unwrap_or_else(|e| panic!("read {}: {e}", logo_path.display()));
 
-    let rgba = image::load_from_memory(&png)
-        .expect("logo.png")
-        .into_rgba8();
+    let rgba = logo_bitmap::decode_logo_rgba(&png);
 
     let out_ico = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("app.ico");
     let mut icon_dir = ico::IconDir::new(ico::ResourceType::Icon);
@@ -28,12 +30,11 @@ fn windows_icon() {
         } else {
             image::imageops::resize(&rgba, size, size, image::imageops::FilterType::Lanczos3)
         };
-        let entry = ico::IconDirEntry::encode(&ico::IconImage::from_rgba_data(
-            size,
-            size,
-            scaled.into_raw(),
-        ))
-        .unwrap_or_else(|e| panic!("ico encode {size}x{size}: {e}"));
+        // Opaque pixels: Explorer often paints BMP-style icons with white behind “empty” alpha.
+        let flat = logo_bitmap::composite_on_icon_bg(&scaled);
+        let icon_img = ico::IconImage::from_rgba_data(size, size, flat.into_raw());
+        let entry = ico::IconDirEntry::encode_as_png(&icon_img)
+            .unwrap_or_else(|e| panic!("ico encode {size}x{size}: {e}"));
         icon_dir.add_entry(entry);
     }
 
