@@ -10,6 +10,7 @@ mod ms_store;
 mod steam;
 mod uninstall;
 mod win_lnk;
+mod workflow;
 
 fn window_icon() -> eframe::egui::IconData {
     logo_asset::window_icon_data()

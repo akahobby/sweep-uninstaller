@@ -1,5 +1,4 @@
 use crate::models::{InstalledEntry, LeftoverItem, LeftoverKind};
-use crate::steam;
 use crate::win_lnk;
 use std::collections::HashSet;
 use std::env;
@@ -10,8 +9,19 @@ use winreg::enums::*;
 use winreg::RegKey;
 
 const STOP_WORDS: &[&str] = &[
-    "the", "and", "for", "with", "from", "your", "app", "application", "free", "trial", "bit",
-    "x64", "x86",
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "your",
+    "app",
+    "application",
+    "free",
+    "trial",
+    "bit",
+    "x64",
+    "x86",
 ];
 
 fn tokenize_name(name: &str) -> Vec<String> {
@@ -26,7 +36,38 @@ fn tokenize_name(name: &str) -> Vec<String> {
 }
 
 fn path_is_safe_candidate(p: &Path) -> bool {
-    let s = p.to_string_lossy().to_lowercase();
+    if !p.is_absolute() || p.parent().is_none() {
+        return false;
+    }
+    let s = p.to_string_lossy().replace('/', "\\").to_lowercase();
+    if s.trim_end_matches('\\').ends_with(r"\steamapps\common") {
+        return false;
+    }
+    for variable in [
+        "SystemRoot",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "ProgramData",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+    ] {
+        if let Ok(root) = env::var(variable) {
+            if crate::workflow::target_in_install_location(&root, &s) {
+                return false;
+            }
+        }
+    }
+    if p.components()
+        .any(|part| part == std::path::Component::ParentDir)
+    {
+        return false;
+    }
+    if s.split('\\')
+        .any(|part| matches!(part, "windowsapps" | "windows apps"))
+    {
+        return false;
+    }
     if s.contains("\\windows\\") || s.ends_with("\\windows") {
         return false;
     }
@@ -78,12 +119,11 @@ pub fn scan_leftovers(entry: &InstalledEntry) -> Vec<LeftoverItem> {
     let mut items = Vec::new();
 
     let tokens = tokenize_name(&entry.display_name);
-    let pub_tokens = tokenize_name(&entry.publisher);
 
     // 1) Install folder still on disk (exact path only)
     if let Some(loc) = &entry.install_location {
         let p = PathBuf::from(loc);
-        if p.exists() {
+        if p.exists() && path_is_safe_candidate(&p) {
             let kind = if p.is_dir() {
                 LeftoverKind::Folder
             } else {
@@ -100,29 +140,8 @@ pub fn scan_leftovers(entry: &InstalledEntry) -> Vec<LeftoverItem> {
         }
     }
 
-    // 2) Steam library folders (all libraries) matching game title
-    if entry.steam_app_id.is_some() {
-        let appid = entry.steam_app_id.unwrap();
-        let slug = entry.display_name.to_lowercase();
-        for common in steam::steam_common_directories() {
-            for ent in WalkDir::new(&common).max_depth(1).into_iter().filter_map(Result::ok) {
-                if !ent.file_type().is_dir() {
-                    continue;
-                }
-                let name = ent.file_name().to_string_lossy().to_lowercase();
-                if name.contains(&slug) || slug.contains(&name) {
-                    let pb = ent.path().to_path_buf();
-                    if seen.insert(pb.clone()) {
-                        items.push(LeftoverItem::new(
-                            LeftoverKind::Folder,
-                            pb,
-                            format!("Steam library folder (app {appid})"),
-                        ));
-                    }
-                }
-            }
-        }
-    }
+    // Steam games use only the exact manifest install location above. A title-based
+    // search can match other games or shared library directories.
 
     // 3) AppData / Local / Roaming / LocalLow / ProgramData — top-level folders only (fast)
     let mut scan_roots: Vec<PathBuf> = Vec::new();
@@ -142,7 +161,7 @@ pub fn scan_leftovers(entry: &InstalledEntry) -> Vec<LeftoverItem> {
     }
 
     for root in scan_roots {
-        if !root.is_dir() || !path_is_safe_candidate(&root) {
+        if !root.is_dir() {
             continue;
         }
         let Ok(read) = fs::read_dir(&root) else {
@@ -161,19 +180,13 @@ pub fn scan_leftovers(entry: &InstalledEntry) -> Vec<LeftoverItem> {
                 continue;
             }
             let by_app = folder_matches_tokens(&name, &tokens);
-            let by_pub = !pub_tokens.is_empty()
-                && entry.publisher.len() > 2
-                && folder_matches_tokens(&name, &pub_tokens);
-            if by_app || by_pub {
+
+            if by_app {
                 if seen.insert(path.clone()) {
                     items.push(LeftoverItem::new(
                         LeftoverKind::Folder,
                         path,
-                        if by_app {
-                            "Name matched profile / program data folder"
-                        } else {
-                            "Publisher matched data folder"
-                        },
+                        "Name matched profile / program data folder (may contain shared data)",
                     ));
                 }
             }
@@ -182,26 +195,36 @@ pub fn scan_leftovers(entry: &InstalledEntry) -> Vec<LeftoverItem> {
 
     // 4) Start Menu shortcuts
     for root in enumerate_start_menu_roots() {
-        for w in WalkDir::new(&root).max_depth(4).into_iter().filter_map(Result::ok) {
+        for w in WalkDir::new(&root)
+            .max_depth(4)
+            .into_iter()
+            .filter_map(Result::ok)
+        {
             let p = w.path();
             if !p.is_file() {
                 continue;
             }
-            if p.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("lnk")) != Some(true)
+            if p.extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.eq_ignore_ascii_case("lnk"))
+                != Some(true)
             {
                 continue;
             }
-            let stem = p.file_stem().unwrap_or_default().to_string_lossy().to_lowercase();
+            let stem = p
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_lowercase();
             let mut hit = tokens.iter().any(|t| stem.contains(t.as_str()));
             if !hit {
                 hit = stem.contains(&entry.display_name.to_lowercase());
             }
             let target_hit = win_lnk::resolve_lnk_target(p).map(|t| {
-                let tl = t.to_lowercase();
                 entry
                     .install_location
                     .as_ref()
-                    .map(|loc| tl.starts_with(&loc.to_lowercase()))
+                    .map(|loc| crate::workflow::target_in_install_location(&t, loc))
                     .unwrap_or(false)
             });
             if hit || target_hit == Some(true) {
@@ -236,10 +259,12 @@ pub fn scan_leftovers(entry: &InstalledEntry) -> Vec<LeftoverItem> {
             }
         } else {
             let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-            for path in [
-                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-                r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
-            ] {
+            let path = if entry.id.starts_with(r"reg:HKLM\WOW6432Node\") {
+                r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+            } else {
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+            };
+            {
                 if let Ok(k) = hklm.open_subkey(path) {
                     if k.open_subkey(sub).is_ok() {
                         let disp = format!("HKLM\\{path}\\{sub}");
@@ -278,6 +303,9 @@ pub fn scan_leftovers(entry: &InstalledEntry) -> Vec<LeftoverItem> {
 pub fn delete_leftover(item: &LeftoverItem) -> Result<(), String> {
     match item.kind {
         LeftoverKind::Folder => {
+            if !path_is_safe_candidate(&item.path) {
+                return Err("Refusing to delete a protected folder".into());
+            }
             fs::remove_dir_all(&item.path).map_err(|e| e.to_string())?;
         }
         LeftoverKind::File => {
@@ -311,4 +339,38 @@ fn delete_registry_display_path(s: &str) -> Result<(), String> {
         .delete_subkey_all(subkey_name)
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn protected_install_locations_are_not_cleanup_candidates() {
+        for path in [
+            r"C:\",
+            r"C:",
+            r"relative\app",
+            r"C:\Windows",
+            r"C:\Windows\System32",
+            r"C:\Program Files\WindowsApps\package",
+            r"C:\Steam\steamapps\common",
+            r"C:\Apps\Foo\..\..",
+        ] {
+            assert!(!path_is_safe_candidate(Path::new(path)), "{path}");
+        }
+        assert!(path_is_safe_candidate(Path::new(
+            r"C:\SweepTestApps\Example"
+        )));
+    }
+
+    #[test]
+    fn cleanup_candidates_require_explicit_selection() {
+        let item = LeftoverItem::new(
+            LeftoverKind::Folder,
+            PathBuf::from(r"C:\Apps\Example"),
+            "test",
+        );
+        assert!(!item.selected);
+    }
 }

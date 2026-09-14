@@ -24,10 +24,7 @@ fn steam_path_from_registry() -> Option<PathBuf> {
         }
     }
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    for subkey in [
-        r"SOFTWARE\WOW6432Node\Valve\Steam",
-        r"SOFTWARE\Valve\Steam",
-    ] {
+    for subkey in [r"SOFTWARE\WOW6432Node\Valve\Steam", r"SOFTWARE\Valve\Steam"] {
         if let Ok(steam) = hklm.open_subkey(subkey) {
             if let Ok(path) = steam.get_value::<String, _>("InstallPath") {
                 let p = PathBuf::from(path.replace('/', "\\"));
@@ -47,17 +44,6 @@ fn extract_quoted_paths(text: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn steam_common_directories() -> Vec<PathBuf> {
-    let Some(steam_root) = steam_path_from_registry() else {
-        return Vec::new();
-    };
-    library_paths(&steam_root)
-        .into_iter()
-        .map(|p| p.join("steamapps").join("common"))
-        .filter(|p| p.is_dir())
-        .collect()
-}
-
 fn library_paths(steam_root: &Path) -> Vec<PathBuf> {
     let mut set: HashSet<PathBuf> = HashSet::new();
     set.insert(steam_root.to_path_buf());
@@ -71,7 +57,11 @@ fn library_paths(steam_root: &Path) -> Vec<PathBuf> {
             }
         }
     }
-    set.into_iter().collect()
+    let mut paths: Vec<_> = set.into_iter().collect();
+    paths.sort();
+    let mut seen = HashSet::new();
+    paths.retain(|p| seen.insert(crate::workflow::windows_path_key(&p.to_string_lossy())));
+    paths
 }
 
 fn parse_acf(content: &str) -> Option<(u32, String)> {
@@ -136,11 +126,8 @@ pub fn enumerate_steam_games() -> Vec<InstalledEntry> {
             let install_dir_line = content
                 .lines()
                 .find(|l| l.trim_start().starts_with("\"installdir\""));
-            let installdir = install_dir_line.and_then(|l| {
-                l.split('"')
-                    .nth(3)
-                    .map(|s| apps.join("common").join(s))
-            });
+            let installdir = install_dir_line
+                .and_then(|l| l.split('"').nth(3).map(|s| apps.join("common").join(s)));
             let install_location = installdir
                 .filter(|p| p.exists())
                 .map(|p| p.to_string_lossy().to_string());
@@ -167,6 +154,13 @@ pub fn enumerate_steam_games() -> Vec<InstalledEntry> {
         }
     }
 
-    games.sort_by(|a, b| a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()));
+    // A manifest can be encountered through path aliases or in more than one library.
+    let mut seen_ids = HashSet::new();
+    games.retain(|game| seen_ids.insert(game.steam_app_id));
+    games.sort_by(|a, b| {
+        a.display_name
+            .to_lowercase()
+            .cmp(&b.display_name.to_lowercase())
+    });
     games
 }

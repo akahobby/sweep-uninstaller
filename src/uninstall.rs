@@ -12,12 +12,34 @@ fn normalize_msi_uninstall(s: &str) -> String {
     if !lower.contains("msiexec") {
         return s.to_string();
     }
-    let re_i = Regex::new(r"(?i)/I(\{[0-9A-Fa-f-]{36}\})").unwrap();
-    re_i.replace_all(s, "/X$1").to_string()
+    let re_i = Regex::new(r"(?i)(\s)/I\s*(\{[0-9A-Fa-f-]{36}\})").unwrap();
+    re_i.replace_all(s, "${1}/X${2}").to_string()
 }
 
 fn escape_powershell_single_quoted(s: &str) -> String {
     s.replace('\'', "''")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn msi_install_switch_accepts_optional_whitespace() {
+        let guid = "{12345678-1234-1234-1234-123456789ABC}";
+        for separator in ["", " ", "  "] {
+            assert_eq!(
+                normalize_msi_uninstall(&format!("MsiExec.exe /I{separator}{guid}")),
+                format!("MsiExec.exe /X{guid}")
+            );
+        }
+        let command = format!("msiexec.exe /X{guid} /quiet");
+        assert_eq!(normalize_msi_uninstall(&command), command);
+        assert_eq!(
+            normalize_msi_uninstall("vendor.exe /Install"),
+            "vendor.exe /Install"
+        );
+    }
 }
 
 /// `Remove-AppxPackage` for the current user (Microsoft Store / AppX / MSIX).
@@ -64,7 +86,11 @@ pub fn run_official_uninstall(entry: &InstalledEntry) -> io::Result<std::process
     let cmdline = entry
         .uninstall_string
         .as_deref()
-        .or(entry.quiet_uninstall_string.as_deref())
+        .filter(|s| !s.trim().is_empty())
+        .or(entry
+            .quiet_uninstall_string
+            .as_deref()
+            .filter(|s| !s.trim().is_empty()))
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "No uninstall command"))?;
 
     let cmdline = normalize_msi_uninstall(cmdline.trim());

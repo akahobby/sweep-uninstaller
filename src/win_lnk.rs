@@ -1,6 +1,5 @@
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
-use std::sync::Once;
 use windows::core::{Interface, PCWSTR};
 use windows::Win32::Foundation::MAX_PATH;
 use windows::Win32::Storage::FileSystem::WIN32_FIND_DATAW;
@@ -10,7 +9,22 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::UI::Shell::{IShellLinkW, ShellLink, SLGP_RAWPATH};
 
-static COM_INIT: Once = Once::new();
+struct ComApartment;
+
+impl Drop for ComApartment {
+    fn drop(&mut self) {
+        unsafe {
+            CoUninitialize();
+        }
+    }
+}
+
+thread_local! {
+    // COM is per-thread; each successful initialization must be balanced on that thread.
+    static COM_APARTMENT: Option<ComApartment> =
+        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
+            .ok().ok().map(|_| ComApartment);
+}
 
 /// Returns target path for a .lnk file, if resolvable.
 pub fn resolve_lnk_target(lnk_path: &Path) -> Option<String> {
@@ -20,9 +34,7 @@ pub fn resolve_lnk_target(lnk_path: &Path) -> Option<String> {
         .chain(std::iter::once(0))
         .collect();
 
-    COM_INIT.call_once(|| {
-        let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
-    });
+    init_com();
 
     unsafe {
         let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).ok()?;
@@ -51,16 +63,7 @@ pub fn resolve_lnk_target(lnk_path: &Path) -> Option<String> {
     }
 }
 
-/// Best-effort COM init for the process (called from main).
+/// Best-effort COM init for the calling thread; another apartment may already exist.
 pub fn init_com() {
-    COM_INIT.call_once(|| {
-        let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
-    });
-}
-
-#[allow(dead_code)]
-pub fn uninit_com() {
-    unsafe {
-        CoUninitialize();
-    }
+    COM_APARTMENT.with(|_| {});
 }
