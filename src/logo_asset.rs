@@ -21,8 +21,7 @@ pub fn window_icon_data() -> IconData {
 
     let img = decoded_logo();
     let bg = logo_bitmap::ICON_BG;
-    let mut canvas: RgbaImage =
-        ImageBuffer::from_fn(CANVAS, CANVAS, |_, _| bg);
+    let mut canvas: RgbaImage = ImageBuffer::from_fn(CANVAS, CANVAS, |_, _| bg);
 
     let (iw, ih) = (img.width(), img.height());
     let max_side = iw.max(ih).max(1) as f32;

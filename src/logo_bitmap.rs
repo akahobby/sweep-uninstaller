@@ -159,12 +159,7 @@ pub fn rasterize_logo_for_shell_ico(img: &RgbaImage, canvas: u32) -> RgbaImage {
     let nh = (ih * scale).round().clamp(1.0, canvas as f32) as u32;
 
     // Triangle filter avoids Lanczos overshoot (bright white halos) on small icons.
-    let resized = image::imageops::resize(
-        img,
-        nw,
-        nh,
-        image::imageops::FilterType::Triangle,
-    );
+    let resized = image::imageops::resize(img, nw, nh, image::imageops::FilterType::Triangle);
 
     let mut out: RgbaImage = ImageBuffer::from_fn(canvas, canvas, |_, _| ICON_BG);
     let ox = ((canvas.saturating_sub(nw)) / 2) as i64;

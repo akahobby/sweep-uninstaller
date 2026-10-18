@@ -46,7 +46,8 @@ fn gather_from_hive(hive: &RegKey, hive_name: &str, hkcu: bool) -> Vec<Installed
         let install_location = read_string(&key, "InstallLocation")
             .map(|s| s.trim().trim_end_matches('\\').to_string())
             .filter(|s| !s.is_empty());
-        let uninstall_string = read_string(&key, "UninstallString").filter(|s| !s.trim().is_empty());
+        let uninstall_string =
+            read_string(&key, "UninstallString").filter(|s| !s.trim().is_empty());
         let quiet_uninstall_string =
             read_string(&key, "QuietUninstallString").filter(|s| !s.trim().is_empty());
 
@@ -100,7 +101,8 @@ pub fn enumerate_registry_programs() -> Vec<InstalledEntry> {
             let install_location = read_string(&key, "InstallLocation")
                 .map(|s| s.trim().trim_end_matches('\\').to_string())
                 .filter(|s| !s.is_empty());
-            let uninstall_string = read_string(&key, "UninstallString").filter(|s| !s.trim().is_empty());
+            let uninstall_string =
+                read_string(&key, "UninstallString").filter(|s| !s.trim().is_empty());
             let quiet_uninstall_string =
                 read_string(&key, "QuietUninstallString").filter(|s| !s.trim().is_empty());
 
@@ -130,6 +132,10 @@ pub fn enumerate_registry_programs() -> Vec<InstalledEntry> {
     }
 
     let mut v: Vec<_> = map.into_values().collect();
-    v.sort_by(|a, b| a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()));
+    v.sort_by(|a, b| {
+        a.display_name
+            .to_lowercase()
+            .cmp(&b.display_name.to_lowercase())
+    });
     v
 }

@@ -85,7 +85,11 @@ pub fn enumerate_store_packages() -> Vec<InstalledEntry> {
         });
     }
 
-    out.sort_by(|a, b| a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()));
+    out.sort_by(|a, b| {
+        a.display_name
+            .to_lowercase()
+            .cmp(&b.display_name.to_lowercase())
+    });
     out
 }
 

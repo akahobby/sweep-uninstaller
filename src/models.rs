@@ -47,7 +47,7 @@ impl LeftoverItem {
             kind,
             path,
             reason: reason.into(),
-            selected: true,
+            selected: false,
         }
     }
 }
@@ -56,6 +56,8 @@ impl LeftoverItem {
 pub enum AppPhase {
     Idle,
     Uninstalling,
+    AwaitingRemoval,
     ScanningLeftovers,
     ReviewingLeftovers,
+    DeletingLeftovers,
 }
