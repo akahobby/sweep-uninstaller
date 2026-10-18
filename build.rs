@@ -2,11 +2,11 @@ fn main() {
     println!("cargo:rerun-if-changed=assets/logo.png");
     println!("cargo:rerun-if-changed=src/logo_bitmap.rs");
 
-    #[cfg(windows)]
-    windows_icon();
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        windows_icon();
+    }
 }
 
-#[cfg(windows)]
 fn windows_icon() {
     #[path = "src/logo_bitmap.rs"]
     mod logo_bitmap;
@@ -17,7 +17,8 @@ fn windows_icon() {
 
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let logo_path = manifest_dir.join("assets/logo.png");
-    let png = std::fs::read(&logo_path).unwrap_or_else(|e| panic!("read {}: {e}", logo_path.display()));
+    let png =
+        std::fs::read(&logo_path).unwrap_or_else(|e| panic!("read {}: {e}", logo_path.display()));
 
     let mut rgba = logo_bitmap::decode_logo_rgba(&png);
     logo_bitmap::purge_light_matte_for_exe_icon(&mut rgba);
@@ -35,14 +36,27 @@ fn windows_icon() {
     }
 
     let f = File::create(&out_ico).expect("create app.ico");
-    icon_dir
-        .write(BufWriter::new(f))
-        .expect("write app.ico");
+    icon_dir.write(BufWriter::new(f)).expect("write app.ico");
 
     let mut res = winres::WindowsResource::new();
+    if cfg!(not(windows)) && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("gnu") {
+        let target = std::env::var("TARGET").unwrap();
+        let prefix = if target.starts_with("x86_64-") {
+            "x86_64-w64-mingw32"
+        } else {
+            "i686-w64-mingw32"
+        };
+        res.set_windres_path(&format!("{prefix}-windres"));
+        res.set_ar_path(&format!("{prefix}-ar"));
+    }
     res.set_icon(out_ico.to_str().expect("utf8 path"));
     res.set("FileDescription", "Sweep Uninstall");
     res.set("ProductName", "Sweep Uninstall");
     res.set("OriginalFilename", "sweep-uninstall.exe");
     res.compile().unwrap_or_else(|e| panic!("winres: {e}"));
+    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("gnu") {
+        // Resource-only archive members have no symbols for GNU ld to pull in.
+        let object = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("resource.o");
+        println!("cargo:rustc-link-arg={}", object.display());
+    }
 }
